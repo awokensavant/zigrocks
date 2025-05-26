@@ -1,47 +1,57 @@
 const version = @import("builtin").zig_version;
 const std = @import("std");
 
-pub fn build(b: *std.build.Builder) void {
-    const exe = b.addExecutable("main", "main.zig");
+pub fn build(b: *std.Build) void {
+    const target = b.standardTargetOptions(.{});
+    const optimize = b.standardOptimizeOption(.{});
+
+    const exe = b.addExecutable(.{
+        .name = "main",
+        .root_source_file = b.path("main.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+
     exe.linkLibC();
-    exe.linkSystemLibraryName("rocksdb");
+    exe.linkSystemLibrary("rocksdb");
 
     if (@hasDecl(@TypeOf(exe.*), "addLibraryPath")) {
-        exe.addLibraryPath("./rocksdb");
-        exe.addIncludePath("./rocksdb/include");
+        exe.addLibraryPath(b.path("./rocksdb/"));
+        exe.addIncludePath(b.path("./rocksdb/include"));
     } else {
-        exe.addLibPath("./rocksdb");
-        exe.addIncludeDir("./rocksdb/include");
+        exe.addLibraryPath(b.path("./rocksdb"));
+        exe.addIncludePath(b.path("./rocksdb/include"));
     }
 
-    exe.setOutputDir(".");
-
-    if (exe.target.isDarwin()) {
-        b.installFile("./rocksdb/librocksdb.7.8.dylib", "../librocksdb.7.8.dylib");
-        exe.addRPath(".");
+    if (exe.rootModuleTarget().isDarwin()) {
+        b.installFile("./rocksdb/librocksdb.10.2.1.dylib", "../librocksdb.10.2.1.dylib");
+        exe.addRPath(b.path("."));
     }
 
-    exe.install();
+    b.installArtifact(exe);
 
     // And also the key-value store
-    const kvExe = b.addExecutable("kv", "rocksdb.zig");
+    const kvExe = b.addExecutable(.{
+        .name = "kv",
+        .root_source_file = b.path("./rocksdb.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
     kvExe.linkLibC();
-    kvExe.linkSystemLibraryName("rocksdb");
+    kvExe.linkSystemLibrary("rocksdb");
 
     if (@hasDecl(@TypeOf(kvExe.*), "addLibraryPath")) {
-        kvExe.addLibraryPath("./rocksdb");
-        kvExe.addIncludePath("./rocksdb/include");
+        kvExe.addLibraryPath(b.path("./rocksdb"));
+        kvExe.addIncludePath(b.path("./rocksdb/include"));
     } else {
-        kvExe.addLibPath("./rocksdb");
-        kvExe.addIncludeDir("./rocksdb/include");
+        kvExe.addLibraryPath(b.path("./rocksdb"));
+        kvExe.addIncludePath(b.path("./rocksdb/include"));
     }
 
-    kvExe.setOutputDir(".");
-
-    if (kvExe.target.isDarwin()) {
-        b.installFile("./rocksdb/librocksdb.7.8.dylib", "../librocksdb.7.8.dylib");
-        kvExe.addRPath(".");
+    if (kvExe.rootModuleTarget().isDarwin()) {
+        b.installFile("./rocksdb/librocksdb.10.2.1.dylib", "../librocksdb.10.2.1.dylib");
+        kvExe.addRPath(b.path("."));
     }
 
-    kvExe.install();
+    b.installArtifact(kvExe);
 }

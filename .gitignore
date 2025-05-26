@@ -1,6 +1,7 @@
-rocksdb
-zig-cache
-zig-out
+.vscode/
+rocksdb/
+.zig-cache/
+./zig-out/
 *~
 *.o
 *.dylib

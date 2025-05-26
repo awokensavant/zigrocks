@@ -70,7 +70,7 @@ pub const Parser = struct {
             expectTokenKind(tokens, i, Token.Kind.plus_operator) or
             expectTokenKind(tokens, i, Token.Kind.concat_operator))
         {
-            var newE = ExpressionAST{
+            const newE = ExpressionAST{
                 .binary_operation = BinaryOperationAST{
                     .operator = tokens[i],
                     .left = self.allocator.create(ExpressionAST) catch return .{
@@ -103,9 +103,9 @@ pub const Parser = struct {
 
         fn print(self: SelectAST) void {
             std.debug.print("SELECT\n", .{});
-            for (self.columns) |column, i| {
+            for (0..self.columns.len) |i| {
                 std.debug.print("  ", .{});
-                column.print();
+                self.columns[i].print();
                 if (i < self.columns.len - 1) {
                     std.debug.print(",", .{});
                 }
@@ -203,14 +203,11 @@ pub const Parser = struct {
 
         fn print(self: CreateTableAST) void {
             std.debug.print("CREATE TABLE {s} (\n", .{self.table.string()});
-            for (self.columns) |column, i| {
+            for (self.columns) |column| {
                 std.debug.print(
-                    "  {s} {s}",
+                    "  {s} {s},",
                     .{ column.name.string(), column.kind.string() },
                 );
-                if (i < self.columns.len - 1) {
-                    std.debug.print(",", .{});
-                }
                 std.debug.print("\n", .{});
             }
             std.debug.print(")\n", .{});
@@ -292,8 +289,8 @@ pub const Parser = struct {
 
         fn print(self: InsertAST) void {
             std.debug.print("INSERT INTO {s} VALUES (", .{self.table.string()});
-            for (self.values) |value, i| {
-                value.print();
+            for (0..self.values.len) |i| {
+                self.values[i].print();
                 if (i < self.values.len - 1) {
                     std.debug.print(", ", .{});
                 }

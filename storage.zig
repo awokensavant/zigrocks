@@ -1,4 +1,5 @@
 const std = @import("std");
+const builtin = std.builtin;
 
 const RocksDB = @import("rocksdb.zig").RocksDB;
 const Error = @import("types.zig").Error;
@@ -7,12 +8,16 @@ const String = @import("types.zig").String;
 
 pub fn serializeInteger(comptime T: type, buf: *std.ArrayList(u8), i: T) !void {
     var length: [@sizeOf(T)]u8 = undefined;
-    std.mem.writeIntBig(T, &length, i);
+    std.mem.writeInt(T, &length, i, builtin.Endian.little);
     try buf.appendSlice(length[0..8]);
 }
 
 pub fn deserializeInteger(comptime T: type, buf: String) T {
-    return std.mem.readIntBig(T, buf[0..@sizeOf(T)]);
+    return std.mem.readInt(
+        T,
+        buf[0..@sizeOf(T)],
+        builtin.Endian.little,
+    );
 }
 
 pub fn serializeBytes(buf: *std.ArrayList(u8), bytes: String) !void {
@@ -24,8 +29,8 @@ pub fn deserializeBytes(bytes: String) struct {
     offset: usize,
     bytes: String,
 } {
-    var length = deserializeInteger(u64, bytes);
-    var offset = length + 8;
+    const length = deserializeInteger(u64, bytes);
+    const offset = length + 8;
     return .{ .offset = offset, .bytes = bytes[8..offset] };
 }
 
@@ -141,8 +146,8 @@ pub const Storage = struct {
         }
 
         pub fn get(self: Row, field: String) Value {
-            for (self.fields) |f, i| {
-                if (std.mem.eql(u8, field, f)) {
+            for (0..self.fields.len) |i| {
+                if (std.mem.eql(u8, field, self.fields[i])) {
                     // Results are internal buffer views. So make a copy.
                     var copy = std.ArrayList(u8).init(self.allocator);
                     copy.appendSlice(self.cells.items[i]) catch return Storage.Value.NULL;
@@ -166,7 +171,24 @@ pub const Storage = struct {
         const file = try std.fs.cwd().openFileZ("/dev/random", .{});
         defer file.close();
 
-        var buf: [16]u8 = .{};
+        var buf: [16]u8 = .{
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+        };
         _ = try file.read(&buf);
         return buf[0..];
     }
@@ -177,7 +199,7 @@ pub const Storage = struct {
         key.writer().print("row_{s}_", .{table}) catch return "Could not allocate row key";
 
         // Unique row id
-        var id = generateId() catch return "Could not generate id";
+        const id = generateId() catch return "Could not generate id";
         key.appendSlice(id) catch return "Could not allocate for id";
 
         var value = std.ArrayList(u8).init(self.allocator);
@@ -210,7 +232,7 @@ pub const Storage = struct {
             self.row.reset();
             var offset: usize = 0;
             while (offset < rowBytes.len) {
-                var d = deserializeBytes(rowBytes[offset..]);
+                const d = deserializeBytes(rowBytes[offset..]);
                 offset += d.offset;
                 self.row.appendBytes(d.bytes) catch return null;
             }
@@ -229,12 +251,12 @@ pub const Storage = struct {
             .err = "Could not allocate for row prefix",
         };
 
-        var iter = switch (self.db.iter(rowPrefix.items)) {
+        const iter = switch (self.db.iter(rowPrefix.items)) {
             .err => |err| return .{ .err = err },
             .val => |it| it,
         };
 
-        var tableInfo = switch (self.getTable(table)) {
+        const tableInfo = switch (self.getTable(table)) {
             .err => |err| return .{ .err = err },
             .val => |t| t,
         };
@@ -256,9 +278,11 @@ pub const Storage = struct {
         key.writer().print("tbl_{s}_", .{table.name}) catch return "Could not allocate key for table";
 
         var value = std.ArrayList(u8).init(self.allocator);
-        for (table.columns) |column, i| {
+        for (table.columns) |column| {
             serializeBytes(&value, column) catch return "Could not allocate for column";
-            serializeBytes(&value, table.types[i]) catch return "Could not allocate for column type";
+        }
+        for (table.types) |ttype| {
+            serializeBytes(&value, ttype) catch return "Could not allocate for column type";
         }
 
         return self.db.set(key.items, value.items);
@@ -286,13 +310,13 @@ pub const Storage = struct {
 
         var columnOffset: usize = 0;
         while (columnOffset < columnInfo.len) {
-            var column = deserializeBytes(columnInfo[columnOffset..]);
+            const column = deserializeBytes(columnInfo[columnOffset..]);
             columnOffset += column.offset;
             columns.append(column.bytes) catch return .{
                 .err = "Could not allocate for column name.",
             };
 
-            var kind = deserializeBytes(columnInfo[columnOffset..]);
+            const kind = deserializeBytes(columnInfo[columnOffset..]);
             columnOffset += kind.offset;
             types.append(kind.bytes) catch return .{
                 .err = "Could not allocate for column kind.",
@@ -310,7 +334,7 @@ test "serialize/deserialize Value strings" {
     const expectEqualStrings = std.testing.expectEqualStrings;
     const Value = Storage.Value;
 
-    var stringTests = [_]struct {
+    const stringTests = [_]struct {
         value: Value,
         string: String,
     }{
@@ -329,7 +353,7 @@ test "serialize/deserialize Value strings" {
 
     for (stringTests) |testCase| {
         buf.clearRetainingCapacity();
-        var serialized = testCase.value.serialize(&buf);
+        const serialized = testCase.value.serialize(&buf);
 
         buf2.clearRetainingCapacity();
         try Value.deserialize(serialized).asString(&buf2);
@@ -341,7 +365,7 @@ test "serialize/deserialize Value integers" {
     const expectEqual = std.testing.expectEqual;
     const Value = Storage.Value;
 
-    var integerTests = [_]struct {
+    const integerTests = [_]struct {
         value: Value,
         integer: i64,
     }{
@@ -357,7 +381,7 @@ test "serialize/deserialize Value integers" {
     defer buf.deinit();
     for (integerTests) |testCase| {
         buf.clearRetainingCapacity();
-        var serialized = testCase.value.serialize(&buf);
+        const serialized = testCase.value.serialize(&buf);
         try expectEqual(testCase.integer, Value.deserialize(serialized).asInteger());
     }
 }
